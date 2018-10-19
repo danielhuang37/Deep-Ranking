@@ -1,0 +1,9 @@
+#Byte compiles 
+__pycache__/
+*.py[cod]
+*$py.class
+
+#data files
+*.txt
+*.json
+*.pt[h]
