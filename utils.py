@@ -3,8 +3,8 @@ import sys
 import time
 import math
 import numpy as np
-import matplotlib
-import matplotlib.pyplot as plt
+#import matplotlib
+#import matplotlib.pyplot as plt
 import json
 
 _, term_width = os.popen('stty size', 'r').read().split()

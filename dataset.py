@@ -1,7 +1,7 @@
 import os
 import torch
 import numpy as np
-import matplotlib.pyplot as plt
+#import matplotlib.pyplot as plt
 
 from torch.utils.data import Dataset, DataLoader
 from torchvision import transforms, utils
@@ -9,7 +9,7 @@ from skimage import io
 import random
 import pprint
 from PIL import Image
-from pylab import imread
+#from pylab import imread
 import json
 
 class TinyImageNetDataset(Dataset):
@@ -32,8 +32,13 @@ class TinyImageNetDataset(Dataset):
 		self.labels = []
 
 		self.counter = 0
-		
+		self.all_images_filepath = {}
 		self._set_up()
+	
+	def _set_up(self):
+		self._get_classes_labels()
+		self._construct_images_list()
+		print(len(self.images))
 
 	def __len__(self):
 		'''
@@ -45,11 +50,6 @@ class TinyImageNetDataset(Dataset):
 		'''
 		load the image and transform
 		'''
-		
-		#print(len(self.labels))
-		#print(self.counter)
-		
-
 		sample = self.images[idx]
 		label = self.labels[idx]
 		ret_dict = {}
@@ -59,33 +59,23 @@ class TinyImageNetDataset(Dataset):
 			ret_dict["image"] = self._convert_to_rgb(image)
 			ret_dict["label"] = label
 			ret_dict["image_path"] = sample
-			# print(image.size)
-			# print(np.array(image).shape)
+			
 			if self.transform:
 				ret_dict["image"] = self.transform(ret_dict["image"])
 			
 		else:
 			
-
 			for key in sample.keys():
 				temp = sample[key]
 				ret_dict[key] = Image.open(sample[key])
 				ret_dict[key] = self._convert_to_rgb(ret_dict[key])
-				# print(sample[key].size)
-				# print(np.array(sample[key]).shape)
-				# sample[key].show()
+		
 				if self.transform:
 					ret_dict[key] = self.transform(ret_dict[key])
 
 			ret_dict["image_path"] = temp
 			ret_dict["label"] = label
-			
-		self.counter += 1
-		if self.train and self.counter >= len(self.labels):
-			torch.cuda.synchronize()
-			self.counter = 0
-			self._construct_images_list()
-			print("Epoch ended, reshuffle random images")
+		
 		return ret_dict
 
 	def _convert_to_rgb(self, image):
@@ -96,12 +86,6 @@ class TinyImageNetDataset(Dataset):
 		rgbimg.paste(image)
 		return rgbimg
 
-
-	def _set_up(self):
-		self._get_classes_labels()
-		self._construct_images_list()
-		print(len(self.images))
-		
 
 	def _construct_images_list(self):
 		'''
@@ -117,10 +101,6 @@ class TinyImageNetDataset(Dataset):
 			with open(os.path.join(self.files, "val_annotations.txt")) as f:
 				for line in f:
 					info = line.split("\t") # file name, label 
-					# print(info[1])
-					# if (info[1] == "n03763968") or (info[1] == "n04540053"):
-					# if info[1] != 'n03763968' or info[1] != "n04540053":
-					# 	# continue
 					image_path = os.path.join(self.files, "images", info[0])
 					self.images.append(image_path)
 					self.labels.append(info[1])
@@ -131,19 +111,22 @@ class TinyImageNetDataset(Dataset):
 		classes = list(self.classes_labels.keys())
 		assert(len(classes) == 200)
 
-		all_images_filepath = {}
+		
 		for folder in self.class_folders:
-			if len(list(all_images_filepath.keys())) >= self.debug_limit:
-				break
-			all_images_filepath[folder] = []
+			
+			self.all_images_filepath[folder] = []
+			'''
+			key:  the class labels (e.g.: n04540053) from the folder
+			value: the image relative path for each images for the class label 
+			'''
 			for image_file in os.listdir(os.path.join(self.files, folder, "images")):
 				image_file_path = os.path.join(self.files, folder, "images", image_file)
-				all_images_filepath[folder].append(image_file_path)
-		print(len(all_images_filepath))
-		assert(len(all_images_filepath) == self.debug_limit)
-		assert(len(all_images_filepath[self.class_folders[0]]) == 500)
+				self.all_images_filepath[folder].append(image_file_path)
+		print(len(self.all_images_filepath))
+		assert(len(self.all_images_filepath) == self.debug_limit)
+		assert(len(self.all_images_filepath[self.class_folders[0]]) == 500)
 
-		self._setup_triplets(all_images_filepath)
+		self._setup_triplets()
 
 	def _get_classes_labels(self):
 		'''
@@ -176,7 +159,7 @@ class TinyImageNetDataset(Dataset):
 		print("Finished getting the classes labels")
 	
 
-	def _setup_triplets(self, all_images_filepath):
+	def _setup_triplets(self):
 		'''
 		set up the triplet
 		:params
@@ -184,17 +167,25 @@ class TinyImageNetDataset(Dataset):
 		:return
 			triplet: a dictionary of query_image label, positive label, negative label
 		'''
-		for i, label in enumerate(list(all_images_filepath.keys())):
-			for j, image_file in enumerate(all_images_filepath[label]):
-				random_postive_offset = random.randint(1, len(all_images_filepath[label])-1) # 500
-				random_postive_index = (j+random_postive_offset) % len(all_images_filepath[label])
-				positive_file = all_images_filepath[label][random_postive_index]
+		for i, label in enumerate(list(self.all_images_filepath.keys())):
+			for j, image_file in enumerate(self.all_images_filepath[label]):
+				'''
+				offset:		calculates how far away from the original index 
+				index:		the actual index 
+				if we randomly choose offset that are within range (1, number of images for that class), we are garentee the index won't be the same 
 
-				random_negative_folder_offset = random.randint(1, len(all_images_filepath)-1) # 
-				random_negative_folder_index = (i+random_negative_folder_offset) % (len(all_images_filepath)) # 200
-				random_negative_label = list(all_images_filepath.keys())[random_negative_folder_index]
-				random_negative_image_index = random.randint(0, len(all_images_filepath[random_negative_label])-1) # 500
-				negative_file = all_images_filepath[random_negative_label][random_negative_image_index]
+				class offset: Same with the image offset except for class labels
+				class index....
+				'''
+				random_postive_offset = random.randint(1, len(self.all_images_filepath[label])-1) # 500
+				random_postive_index = (j+random_postive_offset) % len(self.all_images_filepath[label])
+				positive_file = self.all_images_filepath[label][random_postive_index]
+
+				random_negative_folder_offset = random.randint(1, len(self.all_images_filepath)-1) # 
+				random_negative_folder_index = (i+random_negative_folder_offset) % (len(self.all_images_filepath)) # 200
+				random_negative_label = list(self.all_images_filepath.keys())[random_negative_folder_index]
+				random_negative_image_index = random.randint(0, len(self.all_images_filepath[random_negative_label])-1) # 500
+				negative_file = self.all_images_filepath[random_negative_label][random_negative_image_index]
 				
 				self.images.append({"image": image_file, "positive": positive_file, "negative": negative_file})
 				self.labels.append(label)
