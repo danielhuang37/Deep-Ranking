@@ -18,7 +18,7 @@ I used pre-trained Resnet-101 and trained for 15 epochs with 0.01 learning rate.
 ![Orginal Image](https://github.com/danielhuang37/Deep-Ranking/blob/master/img/n04399382-orginal.png)
 ![Closest Images](https://github.com/danielhuang37/Deep-Ranking/blob/master/img/n04399382-top.png)
 
-### Base Case
+### Bad Case
 ![Orginal Image](https://github.com/danielhuang37/Deep-Ranking/blob/master/img/n04070727-orginal.png)
 ![Closest Images](https://github.com/danielhuang37/Deep-Ranking/blob/master/img/n04070727-top.png)
 
